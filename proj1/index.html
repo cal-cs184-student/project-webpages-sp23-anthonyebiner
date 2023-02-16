@@ -1,7 +1,266 @@
-<html>
-	<head>
-	</head>
-	<body>
-		Project 1 here
-	</body>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+  <style>
+      body {
+          padding: 100px;
+          width: 1000px;
+          margin: auto;
+          text-align: left;
+          font-weight: 300;
+          font-family: 'Open Sans', sans-serif;
+          color: #121212;
+      }
+
+      h1, h2, h3, h4 {
+          font-family: 'Source Sans Pro', sans-serif;
+      }
+  </style>
+  <title>CS 184 Rasterizer</title>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+</head>
+
+
+<body>
+
+<h1 align="middle">CS 184: Computer Graphics and Imaging, Spring 2018</h1>
+<h1 align="middle">Project 1: Rasterizer</h1>
+<h2 align="middle">Anthony Ebiner and Shruteek Mairal, CS184-cottage-boys</h2>
+
+<br><br>
+
+<div>
+
+  <h2 align="middle">Overview</h2>
+  <p>In this project we built a portion of the rasterization pipeline for triangles. Our rasterizer supports different
+    types of triangles in order to conform to the SVG schema, including full-colored triangles, interpolated triangles,
+    and textured triangles. We also support a variety of anti-aliasing techniques, including supersampling, pixel
+    sampling, and level sampling. Our core triangle rasterizer has been optimized for speed, decreasing rendering times
+    by up to 60%. The other rasterization functions have been optimized for code readability and extensibility,
+    exposing an easy-to-use Triangle2D interface. We've learned many lessons while completing this project, such as the
+    importance of managing floating point precision, the danger of off-by-one errors, and the benefit of writing clean
+    code from the start.</p>
+
+  <h2 align="middle">Section I: Rasterization</h2>
+
+  <h3 align="middle">Part 1: Rasterizing single-color triangles</h3>
+
+  <p>In order to rasterize a triangle, we first order the points to be clockwise from point 0 to point 2, with point 0
+    as the lowest (largest y-coordinate) point, doing swaps until this is the case. We then efficiently loop through
+    every pixel by finding the triangle’s bounding box and checking each y-coordinate row from the center
+    x-coordinate outwards: we go left from the middle until we are on the left side of the triangle and then right
+    from the middle until we are on the right side of the triangle. At each pixel, we check whether its center is
+    inside the triangle using the three lines test, and color the framebuffer appropriately if so. Once both left
+    and right traversal is done we move onto the next y-coordinate row. Once we reach the edge of the viewing box OR
+    we reach the top of the bounding box, our rasterizer finishes. Since our algorithm does not check pixels outside
+    the bounding box edge (starting from the center, where we will almost certainly be close to the triangle to
+    avoid checking wasted pixels), and since it stops itself whenever it reaches the wrong side of the triangle, it
+    skips extra pixel checks and is much more efficient. We also improved the efficiency of our rasterization
+    algorithm by factoring unneeded calculations out of loops. For instance, some calculations of the line test
+    equations depend only on the y-coordinate of the pixel. These calculations can be done once per y loop instead
+    of once per pixel. Other small changes improved the speed of our algorithm, such as defining variables only
+    once, using for loops instead of while loops, and using a uint to store the results of the line tests as bits
+    instead of using multiple variables.</p>
+
+  <p><b>Extra Credit:</b> We tested our improved algorithm against the bounding-box algorithm when rendering the
+    dragon below. Using this middle-out traversal scheme, we showed that our runtime was 32% faster, with rendering
+    taking 6.857 ms for the bounding box implementation and 4.683 ms for our middle-out implementation. Our
+    algorithm also performed significantly better when zoomed in, taking only 6.904 ms to render a portion of the
+    dragon compared to the bounding-box’s 17.632 ms, more than twice as fast. </p>
+
+  <div align="middle">
+    <table style="width=100%">
+      <tr>
+        <td>
+          <img src="images/dragon.png" align="middle" width="400px"/>
+        </td>
+        <td>
+          <img src="images/test4.png" align="middle" width="400px"/>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+
+  <h3 align="middle">Part 2: Antialiasing triangles</h3>
+
+  <p>Our supersampling algorithm samples <i>sample_rate</i> times at each pixel and averages the Color values at each
+    subpixel into a singular Color value for the resulting pixel in the framebuffer. We did this by expanding the
+    sample_buffer by<i>sqrt(sample_rate)</i> in each dimension (e.g. by 4 for a sample_rate of 16). For drawing
+    points and lines, accomplished with fill_pixel, we simply filled all the subpixels corresponding to pixel with
+    the given color. We also create<i>sampled_height</i> and <i>sampled_width</i> variables, corresponding to the
+    height and width of the frame buffer multiplied by<i>sqrt(sample_rate)</i>. Our rasterization algorithm scales
+    the triangle vertices by <i>sqrt(sample_rate)</i>to match its position in the new expanded sample_buffer and
+    uses <i>sampled_height</i> and <i>sampled_width</i> in place of height and width, effectively rendering the
+    triangle at a higher resolution than that of the frame buffer. The <i>resolve_to_framebuffer</i>function takes
+    in this sample buffer and averages out the subpixel color values before adding the color to the framebuffer,
+    effectively downscaling it to the original resolution. This allows for antialiasing, as jagged edges and
+    artifacts are largely eliminated thanks to the resulting blended gradient edges that fade into the background
+    color.
+  </p>
+
+  <div align="middle">
+    <table style="width=100%">
+      <tr>
+        <td>
+          <img src="images/triangles_1.png" align="middle" width="400px"/>
+          <figcaption align="middle">sample_rate = 1</figcaption>
+        </td>
+        <td>
+          <img src="images/triangles_4.png" align="middle" width="400px"/>
+          <figcaption align="middle">sample_rate = 4</figcaption>
+        </td>
+        <td>
+          <img src="images/triangles_16.png" align="middle" width="400px"/>
+          <figcaption align="middle">sample_rate = 16</figcaption>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <p>As seen in the above images, the tip of the red triangle is "smoothed" with an increase in the sample rate. With
+    a low sample rate, the triangle passes between the middle of pixels, leaving gaps in the skinny tip. With a
+    higher sample rate, the tip passes through some smaller pixels. When the higher resolution image is downscaled,
+    the tip of the triangle gradually fades off.</p>
+
+  <h3 align="middle">Part 3: Transforms</h3>
+
+  <p>Our cubeman shows a depiction of a person jumping! Both of their arms are raised and their legs bent at the knee.
+    This took four additional rotates, one for each of the limbs. The translate values for the bottom leg segments
+    were also changed, as well as for the arms as a whole.</p>
+
+  <div align="middle">
+    <table style="width=100%">
+      <tr>
+        <td>
+          <img src="images/robot_jumping.png" align="middle" width="400px"/>
+          <figcaption align="middle">A Happy Cubeman</figcaption>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+
+  <h2 align="middle">Section II: Sampling</h2>
+
+  <h3 align="middle">Part 4: Barycentric coordinates</h3>
+
+  <p>Barycentric coordinates are a 3D coordinate system used to denote the position of points within a 2D triangle,
+    where each coordinate is based on the fraction of the distance of given point from one vertex to the opposite
+    side along the altitude of that vertex, and the sum of the three vertices is always equal to 1. As a result,
+    points in a triangle can be expressed as a function of their distance from each vertex, allowing for color maps
+    as seen in the bottom right image; each point in the equilateral triangle below has been blended between red,
+    green, and blue based on its distance from the corresponding vertex, such that a point right next to the top
+    vertex has the color red, but that fades lower down the triangle.</p>
+
+  <div align="middle">
+    <table style="width=100%">
+      <tr>
+        <td>
+          <img src="images/color_wheel.png" align="middle" width="400px"/>
+        </td>
+        <td>
+          <img src="images/color_triangle.png" align="middle" width="400px"/>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <h3 align="middle">Part 5: "Pixel sampling" for texture mapping</h3>
+
+  <p>Pixel sampling is taking a known coordinate on a framebuffer and sampling a texture/image to display its colors at
+    the appropriate pixel position on the framebuffer. We used pixel sampling to implement texture mapping by taking the
+    coordinates of a framebuffer triangle alongside a texture image and the coordinates of a triangle within the image,
+    then converting the coordinates of each pixel in the framebuffer triangle to its respective position in the texture,
+    then using either nearest-neighbor sampling or bilinear sampling to calculate the Color value of that pixel based on
+    the nearest pixel coordinate(s) in the texture triangle. For nearest-neighbor sampling, we simply assigned the
+    framebuffer pixel the Color value of the closest pixel in the texture map after coordinate transformations. For
+    bilinear sampling, we averaged the framebuffer pixel’s color between the 4 nearest pixels (which formed a bounding
+    box around the pixel) by averaging them proportionally based on the horizontal and vertical distances the pixel was
+    from each side of the bounding box. In the images below, we can see that both bilinear sampling and nearest-neighbor
+    sampling are similar when supersampling at a sample_rate of 16, which makes sense since the pixel averaging done
+    through supersampling makes up for the lack thereof in nearest-neighbor sampling. This means the difference between
+    bilinear and nearest sampling is most pronounced in the non-supersampled images on the left; as we can see, the
+    bilinear image is much better blended here, with longitude and latitude lines that are less jagged (though still
+    somewhat choppy) than with nearest-neighbor sampling.</p>
+
+  <div align="middle">
+    <table style="width=100%">
+      <tr>
+        <td>
+          <img src="images/texmap_neaest_1.png" align="middle" width="400px"/>
+          <figcaption align="middle">Nearest, 1 Sample</figcaption>
+        </td>
+        <td>
+          <img src="images/texmap_nearest_16.png" align="middle" width="400px"/>
+          <figcaption align="middle">Nearest, 16 samples</figcaption>
+        </td>
+      </tr>
+      <br>
+      <tr>
+        <td>
+          <img src="images/texmap_bilinear_1.png" align="middle" width="400px"/>
+          <figcaption align="middle">Bilinear, 1 sample</figcaption>
+        </td>
+        <td>
+          <img src="images/texmap_bilinear_16.png" align="middle" width="400px"/>
+          <figcaption align="middle">Bilinear, 16 samples</figcaption>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+
+  <h3 align="middle">Part 6: "Level sampling" with mipmaps for texture mapping</h3>
+
+  <p>In level sampling, different resolution images (‘mipmaps’) are prepared before rendering (starting from highest
+    fidelity down to very low-resolution blended images), and a mipmap is chosen whenever sampling from the image based
+    on how little resolution is needed for rendering, where this mipmap is used for the texture map. In other words,
+    when very large sections of an image are projected onto very small parts of the framebuffer, less detail is
+    necessary, so precomputed low-quality mipmaps of the image become very useful time and memory-saving tools for
+    rendering without visibly losing fidelity. We implemented level sampling through texture mapping by computing how
+    each dimension of a mapped texture was scaled onto the framebuffer, and for images scaled down, we chose mipmaps of
+    correspondingly low quality and used pixel sampling methods on those mipmaps rather than the full-resolution images
+    themselves.</p>
+
+  <p>We can control speed, memory, and render quality using pixel sampling (nearest vs. bilinear), level sampling
+    (mipmaps vs. full-resolution images), and sampling rate (standard sampling vs. supersampling). With pixel sampling,
+    nearest-neighbor sampling takes roughly the same memory but results in lower render quality and higher speed than
+    bilinear sampling, as only one textured pixel needs to be referenced per framebuffer pixel in nearest-neighbor
+    sampling, versus 4 for bilinear. For sampling rates, supersampling takes much more time (more computations for each
+    pixel rendered), but results in better image quality and antialiasing. For level sampling, using mipmaps takes more
+    memory, but results in better speed without compromising image quality (and in fact results in reduced Moire
+    patterning and antialiasing); this is more cost-effective than supersampling.</p>
+
+  <div align="middle">
+    <table style="width=100%">
+      <tr>
+        <td>
+          <img src="images/texmap_level_zero_pixel_nearest.png" align="middle" width="400px"/>
+          <figcaption align="middle">Level Zero, Pixel Nearest</figcaption>
+        </td>
+        <td>
+          <img src="images/texmap_level_zero_pixel_linear.png" align="middle" width="400px"/>
+          <figcaption align="middle">Level Zero, Pixel Linear</figcaption>
+        </td>
+      </tr>
+      <br>
+      <tr>
+        <td>
+          <img src="images/texmap_level_linear_pixel_nearest.png" align="middle" width="400px"/>
+          <figcaption align="middle">Level Linear, Pixel Nearest</figcaption>
+        </td>
+        <td>
+          <img src="images/texmap_level_linear_pixel_linear.png" align="middle" width="400px"/>
+          <figcaption align="middle">Level Linear, Pixel Linear</figcaption>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <br>
+
+  <h3>https://proj1.anthonyebiner.com</h3>
+</body>
 </html>
